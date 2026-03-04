@@ -1,87 +1,61 @@
 const express = require('express');
-const mongoose = require('mongoose');
+const { Pool } = require('pg');
 const cors = require('cors');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 🏠 ROOT ROUTE (Fixes "Cannot GET /" on Render)
-app.get('/', (req, res) => {
-  res.json({ 
-    message: "SkillRush OS API is Online", 
-    status: "Active",
-    database: mongoose.connection.readyState === 1 ? "Connected" : "Disconnected"
-  });
+// 🔌 NEON POSTGRES CONNECTION
+// Hardcoded for immediate deployment success
+const pool = new Pool({
+  connectionString: "postgresql://neondb_owner:npg_Tywk6JF0vjhi@ep-divine-rain-aihok56x-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require",
+  ssl: { rejectUnauthorized: false }
 });
 
-// 🔌 FORCED CLOUD CONNECTION
-// We use a high timeout to ensure Render has time to find the cluster
-const connectDB = async () => {
+// 🏠 ROOT ROUTE - Use this to verify connection on Render
+app.get('/', async (req, res) => {
   try {
-    await mongoose.connect(process.env.MONGO_URI, {
-      serverSelectionTimeoutMS: 10000, 
-      socketTimeoutMS: 45000,
+    const result = await pool.query('SELECT NOW()');
+    res.json({ 
+      message: "SkillRush API is Online", 
+      db_status: "Connected to Neon", 
+      time: result.rows[0] 
     });
-    console.log("✅ MongoDB Atlas: Cloud Connection Established");
   } catch (err) {
-    console.error("❌ DB Connection Error:", err.message);
-    // If it fails, wait 5 seconds and try again
-    setTimeout(connectDB, 5000);
+    res.status(500).json({ status: "DB Error", error: err.message });
   }
-};
-
-connectDB();
-
-// 📝 USER SCHEMA
-const UserSchema = new mongoose.Schema({
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  name: { type: String, default: "Candidate" },
-  role: { type: String, default: 'candidate' },
-  createdAt: { type: Date, default: Date.now }
 });
 
-const User = mongoose.model('User', UserSchema);
-
-// 🚀 AUTHENTICATION APIS
+// 🚀 REGISTRATION API
 app.post('/api/auth/register', async (req, res) => {
+  const { email, password, name } = req.body;
   try {
-    const { email, password, name } = req.body;
-    const hashed = await bcrypt.hash(password, 10);
-    const newUser = new User({ email: email.toLowerCase(), password: hashed, name });
-    await newUser.save();
-    res.status(201).json({ message: "Cloud Profile Created" });
+    const query = 'INSERT INTO users (email, password, name) VALUES ($1, $2, $3)';
+    await pool.query(query, [email.toLowerCase(), password, name]);
+    res.status(201).json({ message: "User Profile Created in Neon" });
   } catch (err) {
-    res.status(400).json({ error: "Registration Failed" });
+    console.error(err);
+    res.status(400).json({ error: "Registration Failed", details: err.message });
   }
 });
 
+// 🔑 LOGIN API
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
-  const userEmail = email.toLowerCase();
-  
-  // 🛡️ ADMIN BYPASS
-  if (userEmail === "skillrush" && password === "Skillrush@97") {
-    const token = jwt.sign({ email: userEmail, role: 'admin' }, process.env.JWT_SECRET);
-    return res.json({ token, user: { email: userEmail, name: "System Admin", role: "admin" } });
+  try {
+    const query = 'SELECT * FROM users WHERE email = $1 AND password = $2';
+    const result = await pool.query(query, [email.toLowerCase(), password]);
+    
+    if (result.rows.length > 0) {
+      res.json({ message: "Login Successful", user: result.rows[0] });
+    } else {
+      res.status(401).json({ error: "Invalid credentials" });
+    }
+  } catch (err) {
+    res.status(500).json({ error: "Server Error" });
   }
-
-  const user = await User.findOne({ email: userEmail });
-  if (!user || !(await bcrypt.compare(password, user.password))) {
-    return res.status(401).json({ error: "Invalid Credentials" });
-  }
-
-  const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET);
-  res.json({ token, user: { email: user.email, name: user.name, role: user.role } });
-});
-
-app.get('/api/admin/users', async (req, res) => {
-  const users = await User.find({}, '-password').sort({ createdAt: -1 });
-  res.json(users);
 });
 
 const PORT = process.env.PORT || 10000;

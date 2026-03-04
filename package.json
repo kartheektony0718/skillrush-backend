@@ -20,9 +20,9 @@
     "groq-sdk": "^0.37.0",
     "jsonwebtoken": "^9.0.3",
     "mongodb": "3.6",
-    "mongoose": "^9.2.4",
     "multer": "^2.0.2",
-    "pdf-parse-new": "^2.0.0"
+    "pdf-parse-new": "^2.0.0",
+    "pg": "^8.19.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
