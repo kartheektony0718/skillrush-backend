@@ -11,15 +11,15 @@ app.use(express.json());
 
 // 🔌 CLOUD CONNECTION
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("✅ MongoDB Atlas connected (Mumbai Cluster)"))
-  .catch(err => console.error("❌ DB Connection Error:", err));
+  .then(() => console.log("✅ MongoDB Atlas: Connection Optimized (Mumbai)"))
+  .catch(err => console.error("❌ DB Error:", err));
 
-// 📝 SCHEMA FOR TEAMMATES
+// 📝 USER SCHEMA
 const UserSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  name: { type: String, default: "Candidate" },
-  role: { type: String, default: 'candidate' },
+  name: { type: String, default: "New Candidate" },
+  role: { type: String, default: 'candidate' }, 
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -32,16 +32,17 @@ app.post('/api/auth/register', async (req, res) => {
     const hashed = await bcrypt.hash(password, 10);
     const newUser = new User({ email, password: hashed, name });
     await newUser.save();
-    res.status(201).json({ message: "Profile saved to Cloud" });
+    res.status(201).json({ message: "Cloud Profile Created" });
   } catch (err) {
-    res.status(400).json({ error: "Email already exists" });
+    res.status(400).json({ error: "Email already exists in Database" });
   }
 });
 
-// 🔑 LOGIN API (Includes Admin Bypass)
+// 🔑 LOGIN API
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
   
+  // ADMIN BYPASS
   if (email === "skillrush" && password === "Skillrush@97") {
     const token = jwt.sign({ email, role: 'admin' }, process.env.JWT_SECRET);
     return res.json({ token, user: { email, name: "Admin", role: "admin" } });
@@ -58,9 +59,13 @@ app.post('/api/auth/login', async (req, res) => {
 
 // 📊 ADMIN: FETCH ALL USERS
 app.get('/api/admin/users', async (req, res) => {
-  const users = await User.find({}, '-password');
-  res.json(users);
+  try {
+    const users = await User.find({}, '-password');
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: "Sync Failed" });
+  }
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`🚀 API active on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 SkillRush API Active on Port ${PORT}`));
